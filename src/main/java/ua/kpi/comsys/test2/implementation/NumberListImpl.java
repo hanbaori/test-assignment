@@ -7,30 +7,71 @@
 
 package ua.kpi.comsys.test2.implementation;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.math.BigInteger;
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.NoSuchElementException;
 
 import ua.kpi.comsys.test2.NumberList;
 
 /**
- * Custom implementation of INumberList interface.
- * Has to be implemented by each student independently.
+ * Кільцевий двонаправлений список
+ * Двійкова система числення 
+ * Операція алгебраїчного та логічного AND двох чисел
+ * Додаткова система: трійкова
  *
- * @author Alexander Podrubailo
- *
+ * @author Гармаш Максим Андрійович
+ * Група: ІС-31
+ * Варіант: 5
  */
+
 public class NumberListImpl implements NumberList {
+
+    private static final int DEFAULT_BASE = 2; // двійкова система
+    private static final int ALTERNATIVE_BASE = 3; // трійкова система
+
+    private final int base;
+    private Node head;
+    private int size;
+    private int modCount = 0;
+
+    // Вузол кільцевого двонаправленого списку
+    private static class Node {
+        byte data;
+        Node next;
+        Node prev;
+
+        Node(byte data) {
+            this.data = data;
+        }
+    }
 
     /**
      * Default constructor. Returns empty <tt>NumberListImpl</tt>
      */
     public NumberListImpl() {
-        // TODO Auto-generated method stub
+        this.base = DEFAULT_BASE;
+        this.head = null;
+        this.size = 0;
     }
 
+    /**
+     * Constructor with custom base.
+     */
+    private NumberListImpl(int base) {
+        this.base = base;
+        this.head = null;
+        this.size = 0;
+    }
 
     /**
      * Constructs new <tt>NumberListImpl</tt> by <b>decimal</b> number
@@ -39,9 +80,14 @@ public class NumberListImpl implements NumberList {
      * @param file - file where number is stored.
      */
     public NumberListImpl(File file) {
-        // TODO Auto-generated method stub
+        this();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line = reader.readLine();
+            if (line != null && !line.trim().isEmpty()) {
+                initFromDecimalString(line.trim());
+            }
+        } catch (Exception e) {}
     }
-
 
     /**
      * Constructs new <tt>NumberListImpl</tt> by <b>decimal</b> number
@@ -50,9 +96,24 @@ public class NumberListImpl implements NumberList {
      * @param value - number in string notation.
      */
     public NumberListImpl(String value) {
-        // TODO Auto-generated method stub
+        this();
+        try {
+            initFromDecimalString(value);
+        } catch (Exception e) {}
     }
 
+    private void initFromDecimalString(String decimalStr) {
+        if (decimalStr == null || decimalStr.isEmpty()) return;
+        try {
+            BigInteger decimalValue = new BigInteger(decimalStr.trim());
+            if (decimalValue.compareTo(BigInteger.ZERO) < 0) return;
+            
+            String inBase = decimalValue.toString(base);
+            for (char c : inBase.toCharArray()) {
+                add((byte) Character.getNumericValue(c));
+            }
+        } catch (NumberFormatException e) {}
+    }
 
     /**
      * Saves the number, stored in the list, into specified file
@@ -61,7 +122,11 @@ public class NumberListImpl implements NumberList {
      * @param file - file where number has to be stored.
      */
     public void saveList(File file) {
-        // TODO Auto-generated method stub
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            writer.write(toDecimalString());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
@@ -71,8 +136,7 @@ public class NumberListImpl implements NumberList {
      * @return student's record book number.
      */
     public static int getRecordBookNumber() {
-        // TODO Auto-generated method stub
-        return 0;
+        return 5;
     }
 
 
@@ -85,8 +149,24 @@ public class NumberListImpl implements NumberList {
      * @return <tt>NumberListImpl</tt> in other scale of notation.
      */
     public NumberListImpl changeScale() {
-        // TODO Auto-generated method stub
-        return null;
+        BigInteger decimalValue = new BigInteger(toDecimalString());
+        NumberListImpl result = new NumberListImpl(ALTERNATIVE_BASE);
+
+        if (decimalValue.equals(BigInteger.ZERO)) {
+            result.add((byte)0);
+            return result;
+        }
+
+        // Перетворення вручну у трійкову систему
+        BigInteger baseAlt = BigInteger.valueOf(ALTERNATIVE_BASE);
+        while (decimalValue.compareTo(BigInteger.ZERO) > 0) {
+            BigInteger[] divRem = decimalValue.divideAndRemainder(baseAlt);
+            // додаємо розряд на початок списку
+            result.add(0, divRem[1].byteValue());
+            decimalValue = divRem[0];
+        }
+
+        return result;  
     }
 
 
@@ -101,8 +181,23 @@ public class NumberListImpl implements NumberList {
      * @return result of additional operation.
      */
     public NumberListImpl additionalOperation(NumberList arg) {
-        // TODO Auto-generated method stub
-        return null;
+        if (arg == null) throw new IllegalArgumentException("Argument cannot be null");
+
+        // Використовуємо toDecimalString для універсальності операндів
+        BigInteger n1 = new BigInteger(this.toDecimalString());
+        BigInteger n2 = new BigInteger(((NumberListImpl)arg).toDecimalString());
+
+        BigInteger andResult = n1.and(n2);
+
+        // Створюємо результат. Конструктор за замовчуванням встановить base=2
+        NumberListImpl result = new NumberListImpl();
+        
+        // Використовуємо ініціалізацію через BigInteger, щоб не писати цикли вручну
+        String binary = andResult.toString(2); 
+        for (char c : binary.toCharArray()) {
+            result.add((byte) Character.getNumericValue(c));
+        }
+        return result;
     }
 
 
@@ -113,215 +208,583 @@ public class NumberListImpl implements NumberList {
      * @return string representation in <b>decimal</b> scale.
      */
     public String toDecimalString() {
-        // TODO Auto-generated method stub
-        return null;
+        if (isEmpty()) return "0";
+
+        BigInteger decimal = BigInteger.ZERO;
+        BigInteger baseVal = BigInteger.valueOf(base);
+
+        Node curr = head;
+        for (int i = 0; i < size; i++) {
+            decimal = decimal.multiply(baseVal).add(BigInteger.valueOf(curr.data));
+            curr = curr.next;
+        }
+
+        return decimal.toString();
     }
 
 
     @Override
     public String toString() {
-        // TODO Auto-generated method stub
-        return null;
+        if (isEmpty()) return "0";
+
+        StringBuilder sb = new StringBuilder();
+        Node curr = head;
+
+        for (int i = 0; i < size; i++) {
+            sb.append(curr.data);
+            curr = curr.next;
+        }
+
+        return sb.toString();
     }
 
 
     @Override
     public boolean equals(Object o) {
-        // TODO Auto-generated method stub
-        return false;
+        if (this == o) return true;
+        if (!(o instanceof NumberList)) return false;
+
+        NumberList other = (NumberList) o;
+        
+        if (this.size() != other.size()) return false;
+
+        Node curr = this.head;
+        for (int i = 0; i < size; i++) {
+            if (!Byte.valueOf(curr.data).equals(other.get(i))) return false;
+            curr = curr.next;
+        }
+        return true;
     }
 
 
     @Override
     public int size() {
-        // TODO Auto-generated method stub
-        return 0;
+        return size;
     }
-
 
     @Override
     public boolean isEmpty() {
-        // TODO Auto-generated method stub
-        return false;
+        return size == 0;
     }
 
 
     @Override
     public boolean contains(Object o) {
-        // TODO Auto-generated method stub
+        if (!(o instanceof Byte)) return false;
+        if (isEmpty()) return false;
+
+        byte target = (Byte) o;
+        Node curr = head;
+
+        for (int i = 0; i < size; i++) {
+            if (curr.data == target) return true;
+            curr = curr.next;
+        }
         return false;
     }
 
 
     @Override
     public Iterator<Byte> iterator() {
-        // TODO Auto-generated method stub
-        return null;
+        return new Iterator<Byte>() {
+            private Node current = head;
+            private int visited = 0;
+
+            @Override
+            public boolean hasNext() {
+                return visited < size;
+            }
+
+            @Override
+            public Byte next() {
+                Byte val = current.data;
+                current = current.next;
+                visited++;
+                return val;
+            }
+        };
     }
+
 
 
     @Override
     public Object[] toArray() {
-        // TODO Auto-generated method stub
-        return null;
+        Object[] arr = new Object[size];
+        Node curr = head;
+        for (int i = 0; i < size; i++) {
+            arr[i] = curr.data;
+            curr = curr.next;
+        }
+        return arr;
     }
+
 
 
     @Override
     public <T> T[] toArray(T[] a) {
-        // TODO Auto-generated method stub
         return null;
     }
 
 
     @Override
     public boolean add(Byte e) {
-        // TODO Auto-generated method stub
-        return false;
+        if (e == null) throw new NullPointerException();
+        if (e < 0 || e >= base)
+            throw new IllegalArgumentException("Digit out of range");
+
+        Node node = new Node(e);
+
+        if (isEmpty()) {
+            head = node;
+            head.next = head;
+            head.prev = head;
+        } else {
+            Node tail = head.prev;
+            tail.next = node;
+            node.prev = tail;
+            node.next = head;
+            head.prev = node;
+        }
+
+        size++;
+        modCount++;
+        return true;
     }
 
 
     @Override
     public boolean remove(Object o) {
-        // TODO Auto-generated method stub
+        if (!(o instanceof Byte) || isEmpty()) return false;
+
+        byte target = (Byte) o;
+        Node curr = head;
+
+        for (int i = 0; i < size; i++) {
+            if (curr.data == target) {
+                if (size == 1) {
+                    head = null;
+                } else {
+                    curr.prev.next = curr.next;
+                    curr.next.prev = curr.prev;
+                    if (curr == head) head = curr.next;
+                }
+                size--;
+                modCount++;
+                return true;
+            }
+            curr = curr.next;
+        }
         return false;
     }
 
 
     @Override
     public boolean containsAll(Collection<?> c) {
-        // TODO Auto-generated method stub
-        return false;
+        for (Object o : c) {
+            if (!contains(o)) return false;
+        }
+        return true;
     }
 
 
     @Override
     public boolean addAll(Collection<? extends Byte> c) {
-        // TODO Auto-generated method stub
-        return false;
+        if (c == null || c.isEmpty()) return false;
+        for (Byte b : c) add(b);
+        return true;
     }
 
 
-    @Override
+   @Override
     public boolean addAll(int index, Collection<? extends Byte> c) {
-        // TODO Auto-generated method stub
-        return false;
-    }
+        if (index < 0 || index > size)
+            throw new IndexOutOfBoundsException();
 
+        if (c == null || c.isEmpty()) return false;
+
+        for (Byte b : c) {
+            add(index++, b);
+        }
+        return true;
+    }
 
     @Override
     public boolean removeAll(Collection<?> c) {
-        // TODO Auto-generated method stub
-        return false;
+        if (c == null) throw new NullPointerException();
+        boolean modified = false;
+        Iterator<Byte> it = iterator();
+        while (it.hasNext()) {
+            if (c.contains(it.next())) {
+                it.remove(); // Видаляє саме поточний вузол
+                modified = true;
+            }
+        }
+        return modified;
     }
-
 
     @Override
     public boolean retainAll(Collection<?> c) {
-        // TODO Auto-generated method stub
-        return false;
+        if (c == null) throw new NullPointerException();
+        boolean modified = false;
+        Iterator<Byte> it = iterator();
+        while (it.hasNext()) {
+            if (!c.contains(it.next())) {
+                it.remove();
+                modified = true;
+            }
+        }
+        return modified;
     }
-
 
     @Override
     public void clear() {
-        // TODO Auto-generated method stub
-
+        head = null;
+        size = 0;
+        modCount++;
     }
-
 
     @Override
     public Byte get(int index) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+        if (index < 0 || index >= size)
+            throw new IndexOutOfBoundsException();
 
+        Node curr = head;
+        for (int i = 0; i < index; i++) {
+            curr = curr.next;
+        }
+        return curr.data;
+    }
 
     @Override
     public Byte set(int index, Byte element) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+        if (index < 0 || index >= size)
+            throw new IndexOutOfBoundsException();
+        if (element == null)
+            throw new NullPointerException();
+        if (element < 0 || element >= base)
+            throw new IllegalArgumentException();
 
+        Node curr = head;
+        for (int i = 0; i < index; i++) {
+            curr = curr.next;
+        }
+
+        byte old = curr.data;
+        curr.data = element;
+        modCount++;
+        return old;
+    }
 
     @Override
     public void add(int index, Byte element) {
-        // TODO Auto-generated method stub
+        if (index < 0 || index > size)
+            throw new IndexOutOfBoundsException();
+        if (element == null)
+            throw new NullPointerException();
+        if (element < 0 || element >= base)
+            throw new IllegalArgumentException();
 
+        if (index == size) {
+            add(element);
+            return;
+        }
+
+        Node newNode = new Node(element);
+
+        if (index == 0) {
+            if (isEmpty()) {
+                head = newNode;
+                newNode.next = newNode;
+                newNode.prev = newNode;
+            } else {
+                Node tail = head.prev;
+                newNode.next = head;
+                newNode.prev = tail;
+                head.prev = newNode;
+                tail.next = newNode;
+                head = newNode;
+            }
+        } else {
+            Node curr = head;
+            for (int i = 0; i < index; i++) {
+                curr = curr.next;
+            }
+            Node prev = curr.prev;
+            prev.next = newNode;
+            newNode.prev = prev;
+            newNode.next = curr;
+            curr.prev = newNode;
+        }
+
+        size++;
+        modCount++;
     }
-
 
     @Override
     public Byte remove(int index) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+        if (index < 0 || index >= size)
+            throw new IndexOutOfBoundsException();
 
+        Node curr = head;
+        for (int i = 0; i < index; i++) {
+            curr = curr.next;
+        }
+
+        byte val = curr.data;
+
+        if (size == 1) {
+            head = null;
+        } else {
+            curr.prev.next = curr.next;
+            curr.next.prev = curr.prev;
+            if (curr == head) head = curr.next;
+        }
+
+        size--;
+        modCount++;
+        return val;
+    }
 
     @Override
     public int indexOf(Object o) {
-        // TODO Auto-generated method stub
-        return 0;
-    }
+        if (!(o instanceof Byte)) return -1;
 
+        Node curr = head;
+        for (int i = 0; i < size; i++) {
+            if (curr.data == (Byte) o) return i;
+            curr = curr.next;
+        }
+        return -1;
+    }
 
     @Override
     public int lastIndexOf(Object o) {
-        // TODO Auto-generated method stub
-        return 0;
+        if (!(o instanceof Byte)) return -1;
+
+        int last = -1;
+        Node curr = head;
+        for (int i = 0; i < size; i++) {
+            if (curr.data == (Byte) o) last = i;
+            curr = curr.next;
+        }
+        return last;
     }
 
-
-    @Override
+        @Override
     public ListIterator<Byte> listIterator() {
-        // TODO Auto-generated method stub
-        return null;
+        return new NumberListListIterator(0);
     }
 
 
     @Override
     public ListIterator<Byte> listIterator(int index) {
-        // TODO Auto-generated method stub
-        return null;
+        if (index < 0 || index > size) {
+            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
+        }
+        return new NumberListListIterator(index);
     }
-
 
     @Override
     public List<Byte> subList(int fromIndex, int toIndex) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+        if (fromIndex < 0 || toIndex > size || fromIndex > toIndex)
+            throw new IndexOutOfBoundsException();
 
+        NumberListImpl res = new NumberListImpl();
+        for (int i = fromIndex; i < toIndex; i++) {
+            res.add(get(i));
+        }
+        return res;
+    }
 
     @Override
     public boolean swap(int index1, int index2) {
-        // TODO Auto-generated method stub
-        return false;
-    }
+        if (index1 < 0 || index1 >= size || index2 < 0 || index2 >= size)
+            return false;
+        if (index1 == index2) return true;
 
+        Byte tmp = get(index1);
+        set(index1, get(index2));
+        set(index2, tmp);
+        return true;
+    }
 
     @Override
     public void sortAscending() {
-        // TODO Auto-generated method stub
+        for (int i = 0; i < size - 1; i++) {
+            for (int j = 0; j < size - i - 1; j++) {
+                if (get(j) > get(j + 1)) swap(j, j + 1);
+            }
+        }
     }
-
 
     @Override
     public void sortDescending() {
-        // TODO Auto-generated method stub
+        for (int i = 0; i < size - 1; i++) {
+            for (int j = 0; j < size - i - 1; j++) {
+                if (get(j) < get(j + 1)) swap(j, j + 1);
+            }
+        }
     }
-
 
     @Override
     public void shiftLeft() {
-        // TODO Auto-generated method stub
-
+        if (size > 1) {
+            head = head.next;
+            modCount++;
+        }
     }
-
 
     @Override
     public void shiftRight() {
-        // TODO Auto-generated method stub
+        if (size > 1) {
+            head = head.prev;
+            modCount++;
+        }
+    }
 
+    // Ітератор для проходу по списку
+    private class NumberListIterator implements Iterator<Byte> {
+        private Node nextNode = head;
+        private Node lastReturned = null;
+        private int index = 0;
+        private int expectedModCount = modCount;
+
+        public boolean hasNext() { return index < size; }
+
+        public Byte next() {
+            if (modCount != expectedModCount) throw new ConcurrentModificationException();
+            if (!hasNext()) throw new NoSuchElementException();
+            lastReturned = nextNode;
+            nextNode = nextNode.next;
+            index++;
+            return lastReturned.data;
+        }
+
+        public void remove() {
+            if (modCount != expectedModCount) throw new ConcurrentModificationException();
+            if (lastReturned == null) throw new IllegalStateException();
+
+            // Логіка видалення вузла lastReturned
+            if (size == 1) {
+                head = null;
+            } else {
+                lastReturned.prev.next = lastReturned.next;
+                lastReturned.next.prev = lastReturned.prev;
+                if (lastReturned == head) head = lastReturned.next;
+            }
+            
+            if (lastReturned != nextNode) index--; 
+            
+            lastReturned = null;
+            size--;
+            modCount++;
+            expectedModCount = modCount;
+        }
+    }
+
+    // ListIterator з можливістю руху в обидва боки
+    private class NumberListListIterator implements ListIterator<Byte> {
+        private Node current;
+        private Node lastReturned = null;
+        private int position;
+        private int expectedModCount = modCount;
+
+        NumberListListIterator(int index) {
+            current = head;
+            for (int i = 0; i < index; i++) {
+                current = current.next;
+            }
+            position = index;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return position < size;
+        }
+
+        @Override
+        public Byte next() {
+            checkForComodification();
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+
+            lastReturned = current;
+            current = current.next;
+            position++;
+            return lastReturned.data;
+        }
+
+        @Override
+        public boolean hasPrevious() {
+            return position > 0;
+        }
+
+        @Override
+        public Byte previous() {
+            checkForComodification();
+            if (!hasPrevious()) throw new NoSuchElementException();
+
+            current = current.prev; 
+            position--;
+            lastReturned = current;
+            return lastReturned.data;
+        }
+
+        @Override
+        public int nextIndex() {
+            return position;
+        }
+
+        @Override
+        public int previousIndex() {
+            return position - 1;
+        }
+
+        @Override
+        public void remove() {
+            checkForComodification();
+            if (lastReturned == null) {
+                throw new IllegalStateException();
+            }
+
+            NumberListImpl.this.remove(position);
+            lastReturned = null;
+            expectedModCount = modCount;
+        }
+
+        @Override
+        public void set(Byte e) {
+            checkForComodification();
+            if (lastReturned == null) {
+                throw new IllegalStateException();
+            }
+
+            NumberListImpl.this.set(position - 1, e);
+            expectedModCount = modCount;
+        }
+
+        @Override
+        public void add(Byte e) {
+            checkForComodification();
+            NumberListImpl.this.add(position, e);
+            position++;
+            lastReturned = null;
+            expectedModCount = modCount;
+        }
+
+        private Node getNodeAt(int index) {
+            Node node = head;
+            for (int i = 0; i < index; i++) {
+                node = node.next;
+            }
+            return node;
+        }
+
+        private void checkForComodification() {
+            if (modCount != expectedModCount) {
+                throw new ConcurrentModificationException();
+            }
+        }
     }
 }
